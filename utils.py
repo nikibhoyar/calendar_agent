@@ -3,20 +3,18 @@ from googleapiclient.discovery import build
 import datetime
 import dateparser
 import streamlit as st
-import json
 
 # Setup Calendar API
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 # ✅ Load credentials from Streamlit secrets
 creds = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
+    dict(st.secrets["gcp_service_account"]),
     scopes=SCOPES
 )
 
 service = build('calendar', 'v3', credentials=creds)
 calendar_id = 'primary'
-
 
 # ✅ Parse time from natural language
 def parse_time(text):
@@ -44,9 +42,7 @@ def parse_time(text):
             }
         )
 
-    print("Parsed time:", dt)
     return dt
-
 
 # ✅ Check availability
 def check_availability(dt):
@@ -61,7 +57,6 @@ def check_availability(dt):
     ).execute()
 
     return not events.get('items')  # True if free
-
 
 # ✅ Book meeting
 def book_meeting(dt):
