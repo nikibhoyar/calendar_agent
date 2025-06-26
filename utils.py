@@ -21,6 +21,7 @@ def parse_time(text):
     now = datetime.datetime.now()
     text = text.lower()
 
+    # Handle vague phrases manually
     if "tomorrow afternoon" in text:
         dt = now + datetime.timedelta(days=1)
         dt = dt.replace(hour=15, minute=0)
@@ -30,6 +31,10 @@ def parse_time(text):
     elif "tomorrow evening" in text:
         dt = now + datetime.timedelta(days=1)
         dt = dt.replace(hour=18, minute=0)
+    elif "next monday" in text:
+        days_ahead = (7 - now.weekday() + 0) % 7 or 7  # 0 for Monday
+        dt = now + datetime.timedelta(days=days_ahead)
+        dt = dt.replace(hour=15, minute=0)  # Default time
     else:
         dt = dateparser.parse(
             text,
@@ -42,7 +47,9 @@ def parse_time(text):
             }
         )
 
+    print("Parsed time:", dt)
     return dt
+
 
 # ✅ Check availability
 def check_availability(dt):
