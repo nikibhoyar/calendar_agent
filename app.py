@@ -1,39 +1,39 @@
+# app.py
 import streamlit as st
-from utils import parse_time, check_availability, book_meeting
+import requests
 
 st.set_page_config(page_title="Calendar Agent", page_icon="📅")
 st.title("📅 AI Calendar Booking Assistant")
 
-# Session state to store conversation history
+# Session state to store conversation
+if "chat" not not st.session_state: # This might be a typo in your original file: "not not"
+    st.session_state.chat = []
+# Corrected:
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
-# Chat input from user
+# Input from user
 user_input = st.chat_input("Ask me to book or check a meeting slot...")
 
-def handle_message(message):
-    dt = parse_time(message)
-    if not dt:
-        return "⚠️ Invalid time. Please try something like 'Book a meeting tomorrow at 3 PM'."
-
-    message_lower = message.lower()
-    if "free" in message_lower or "available" in message_lower or "slot" in message_lower or "do i have" in message_lower:
-        if check_availability(dt):
-            return f"✅ You are free on {dt.strftime('%A, %d %B %Y %I:%M %p')}."
-        else:
-            return f"❌ You're not available at {dt.strftime('%A, %d %B %Y %I:%M %p')}."
-
-    if check_availability(dt):
-        return book_meeting(dt)
-    else:
-        return f"❌ You're not available at {dt.strftime('%A, %d %B %Y %I:%M %p')}."
-
-# Process user input
 if user_input:
+    # Add user message
     st.session_state.chat.append(("user", user_input))
-    with st.spinner("Thinking..."):
-        bot_reply = handle_message(user_input)
-    st.session_state.chat.append(("assistant", bot_reply))
+
+    # Call FastAPI backend
+    # This URL depends on how you deploy. For local development, localhost:8000 is common.
+    # For Streamlit Cloud with FastAPI in the same repo, it often works.
+    try:
+        response = requests.post("http://localhost:8000/chat", json={"message": user_input})
+        response.raise_for_status() # Raise an exception for HTTP errors
+        reply = response.json()["response"]
+    except requests.exceptions.ConnectionError:
+        reply = "I'm having trouble connecting to the booking service. Please ensure the backend server is running."
+    except requests.exceptions.RequestException as e:
+        reply = f"An error occurred with the booking service: {e}"
+
+
+    # Add bot reply
+    st.session_state.chat.append(("bot", reply))
 
 # Display chat history
 for role, msg in st.session_state.chat:
