@@ -6,9 +6,7 @@ st.set_page_config(page_title="Calendar Agent", page_icon="📅")
 st.title("📅 AI Calendar Booking Assistant")
 
 # Session state to store conversation
-if "chat" not not st.session_state: # This might be a typo in your original file: "not not"
-    st.session_state.chat = []
-# Corrected:
+# Corrected typo here: "not not" -> "not in"
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
