@@ -6,7 +6,6 @@ import calendar
 import pytz
 import streamlit as st
 
-# Setup Calendar API
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 creds = None
 service = None
@@ -19,9 +18,8 @@ try:
     calendar_id = 'primary'
 except Exception as e:
     st.error(f"Error loading Google service account credentials: {e}")
-    st.info("Please check your gcp_service_account secret in Streamlit.")
+    st.info("Check your gcp_service_account secret in Streamlit.")
 
-# Parse time from natural language
 def parse_time(text):
     now = datetime.datetime.now()
     text = text.lower()
@@ -47,7 +45,7 @@ def parse_time(text):
             }
         )
         if dt is None:
-            # fallback for weekday phrases like "this Friday"
+            # fallback for weekday mentions
             for weekday in list(calendar.day_name):
                 if weekday.lower() in text:
                     target_weekday = list(calendar.day_name).index(weekday)
@@ -62,37 +60,21 @@ def parse_time(text):
     print(f"DEBUG: Original text: '{text}', Parsed time: {dt}")
     return dt
 
-# Check availability
 def check_availability(text):
     if service is None:
         return "Calendar service is not available due to a configuration error."
 
     dt = parse_time(text)
     if not dt:
-        return "I couldn't understand the date and/or time you provided. Please try again."
+        return "I couldn't understand the date you provided. Please try again."
 
     india_tz = pytz.timezone('Asia/Kolkata')
 
-    time_specified_in_text = any(k in text for k in ["am", "pm", "morning", "afternoon", "evening", "oclock", "o'clock", ":"])
+    day_start = dt.replace(hour=9, minute=0, second=0, microsecond=0)
+    day_end = dt.replace(hour=17, minute=0, second=0, microsecond=0)
 
-    is_full_day_query = (
-        (dt.hour == 0 and dt.minute == 0 and not time_specified_in_text)
-        or ("all day" in text)
-        or ("entire day" in text)
-        or ("whole day" in text)
-        or ("any time" in text)
-    )
-
-    if is_full_day_query:
-        start_time_iso = india_tz.localize(dt.replace(hour=0, minute=0, second=0)).isoformat()
-        end_time_iso = india_tz.localize(dt.replace(hour=23, minute=59, second=59)).isoformat()
-        query_description = f"all day on {dt.strftime('%A, %d %B %Y')}"
-    else:
-        start_time_iso = india_tz.localize(dt).isoformat()
-        end_time_iso = india_tz.localize(dt + datetime.timedelta(hours=1)).isoformat()
-        query_description = f"{dt.strftime('%A, %d %B %Y at %I:%M %p')}"
-
-    print(f"DEBUG: Checking availability from {start_time_iso} to {end_time_iso}")
+    start_time_iso = india_tz.localize(day_start).isoformat()
+    end_time_iso = india_tz.localize(day_end).isoformat()
 
     try:
         events_result = service.events().list(
@@ -105,23 +87,41 @@ def check_availability(text):
 
         events = events_result.get('items', [])
 
-        if not events:
-            return f"You appear to be free {query_description}!"
-        else:
-            summaries = []
-            for event in events:
-                start_dt = event['start'].get('dateTime')
-                end_dt = event['end'].get('dateTime')
-                if start_dt and end_dt:
-                    summaries.append(f"'{event.get('summary', 'No Title')}' from {start_dt} to {end_dt}")
-                else:
-                    summaries.append(f"All-day event: '{event.get('summary', 'No Title')}'")
-            return f"You have these events {query_description}: {', '.join(summaries)}. So you are not fully free."
+        busy_periods = []
+        for event in events:
+            start = event['start'].get('dateTime')
+            end = event['end'].get('dateTime')
+            if start and end:
+                busy_periods.append((
+                    datetime.datetime.fromisoformat(start),
+                    datetime.datetime.fromisoformat(end)
+                ))
+
+        free_slots = []
+        current = day_start
+        while current + datetime.timedelta(hours=1) <= day_end:
+            slot_start = current
+            slot_end = current + datetime.timedelta(hours=1)
+            overlaps = False
+            for busy_start, busy_end in busy_periods:
+                if busy_start < slot_end and busy_end > slot_start:
+                    overlaps = True
+                    break
+            if not overlaps:
+                free_slots.append(slot_start)
+            current += datetime.timedelta(hours=1)
+
+        if not free_slots:
+            return f"Sorry, you have no free 1-hour slots on {dt.strftime('%A, %d %B %Y')}."
+
+        st.session_state.available_slots = free_slots
+
+        slot_list = "\n".join(f"- {slot.strftime('%I:%M %p')}" for slot in free_slots)
+        return f"Here are your free 1-hour slots on {dt.strftime('%A, %d %B %Y')}:\n{slot_list}\nPlease tell me which one you’d like to book."
 
     except Exception as e:
         return f"An error occurred while checking your calendar: {e}"
 
-# Book a meeting
 def book_meeting(text):
     if service is None:
         return "Calendar service is not available due to a configuration error."
