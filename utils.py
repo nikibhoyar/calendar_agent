@@ -9,6 +9,7 @@ import streamlit as st
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 creds = None
 service = None
+
 try:
     creds = service_account.Credentials.from_service_account_info(
         dict(st.secrets["gcp_service_account"]),
@@ -33,6 +34,9 @@ def parse_time(text):
     elif "tomorrow evening" in text:
         dt = now + datetime.timedelta(days=1)
         dt = dt.replace(hour=18, minute=0, second=0, microsecond=0)
+    elif "tomorrow" in text:
+        dt = now + datetime.timedelta(days=1)
+        dt = dt.replace(hour=10, minute=0, second=0, microsecond=0)
     else:
         dt = dateparser.parse(
             text,
@@ -45,7 +49,7 @@ def parse_time(text):
             }
         )
         if dt is None:
-            # fallback for weekday mentions
+            # fallback for weekday mentions like "friday"
             for weekday in list(calendar.day_name):
                 if weekday.lower() in text:
                     target_weekday = list(calendar.day_name).index(weekday)
