@@ -3,6 +3,7 @@ from googleapiclient.discovery import build
 import datetime
 import dateparser
 import calendar
+import pytz
 import streamlit as st
 
 # Setup Calendar API
@@ -18,7 +19,7 @@ try:
     calendar_id = 'primary'
 except Exception as e:
     st.error(f"Error loading Google service account credentials: {e}")
-    st.info("Please ensure your `gcp_service_account` secret is correctly configured in Streamlit.")
+    st.info("Please check your gcp_service_account secret in Streamlit.")
 
 # Parse time from natural language
 def parse_time(text):
@@ -46,7 +47,7 @@ def parse_time(text):
             }
         )
         if dt is None:
-            # fallback for weekday mentions like "this Friday"
+            # fallback for weekday phrases like "this Friday"
             for weekday in list(calendar.day_name):
                 if weekday.lower() in text:
                     target_weekday = list(calendar.day_name).index(weekday)
@@ -68,26 +69,30 @@ def check_availability(text):
 
     dt = parse_time(text)
     if not dt:
-        return "I couldn't understand the date and/or time you provided. Please try a more specific phrase."
+        return "I couldn't understand the date and/or time you provided. Please try again."
+
+    india_tz = pytz.timezone('Asia/Kolkata')
 
     time_specified_in_text = any(k in text for k in ["am", "pm", "morning", "afternoon", "evening", "oclock", "o'clock", ":"])
 
     is_full_day_query = (
-        (dt.hour == 0 and dt.minute == 0 and not time_specified_in_text) or
-        ("all day" in text) or
-        ("entire day" in text) or
-        ("whole day" in text) or
-        ("any time" in text)
+        (dt.hour == 0 and dt.minute == 0 and not time_specified_in_text)
+        or ("all day" in text)
+        or ("entire day" in text)
+        or ("whole day" in text)
+        or ("any time" in text)
     )
 
     if is_full_day_query:
-        start_time_iso = dt.replace(hour=0, minute=0, second=0).isoformat()
-        end_time_iso = dt.replace(hour=23, minute=59, second=59).isoformat()
+        start_time_iso = india_tz.localize(dt.replace(hour=0, minute=0, second=0)).isoformat()
+        end_time_iso = india_tz.localize(dt.replace(hour=23, minute=59, second=59)).isoformat()
         query_description = f"all day on {dt.strftime('%A, %d %B %Y')}"
     else:
-        start_time_iso = dt.isoformat()
-        end_time_iso = (dt + datetime.timedelta(hours=1)).isoformat()
+        start_time_iso = india_tz.localize(dt).isoformat()
+        end_time_iso = india_tz.localize(dt + datetime.timedelta(hours=1)).isoformat()
         query_description = f"{dt.strftime('%A, %d %B %Y at %I:%M %p')}"
+
+    print(f"DEBUG: Checking availability from {start_time_iso} to {end_time_iso}")
 
     try:
         events_result = service.events().list(
@@ -103,22 +108,15 @@ def check_availability(text):
         if not events:
             return f"You appear to be free {query_description}!"
         else:
-            event_summaries = []
+            summaries = []
             for event in events:
-                event_start_dt = event['start'].get('dateTime')
-                event_end_dt = event['end'].get('dateTime')
-
-                if event_start_dt and event_end_dt:
-                    try:
-                        start_parsed = datetime.datetime.fromisoformat(event_start_dt)
-                        end_parsed = datetime.datetime.fromisoformat(event_end_dt)
-                        event_summaries.append(f"'{event.get('summary', 'No Title')}' from {start_parsed.strftime('%I:%M %p')} to {end_parsed.strftime('%I:%M %p')}")
-                    except ValueError:
-                        event_summaries.append(f"'{event.get('summary', 'No Title')}' (time parse error)")
+                start_dt = event['start'].get('dateTime')
+                end_dt = event['end'].get('dateTime')
+                if start_dt and end_dt:
+                    summaries.append(f"'{event.get('summary', 'No Title')}' from {start_dt} to {end_dt}")
                 else:
-                    event_summaries.append(f"All-day event: '{event.get('summary', 'No Title')}'")
-
-            return f"You have existing event(s) {query_description}: {'; '.join(event_summaries)}. You are not entirely free during that period."
+                    summaries.append(f"All-day event: '{event.get('summary', 'No Title')}'")
+            return f"You have these events {query_description}: {', '.join(summaries)}. So you are not fully free."
 
     except Exception as e:
         return f"An error occurred while checking your calendar: {e}"
@@ -130,16 +128,19 @@ def book_meeting(text):
 
     dt = parse_time(text)
     if not dt:
-        return "I couldn't understand the date/time for booking. Please try a more specific phrase."
+        return "I couldn't understand the date/time for booking. Please try again."
 
-    start_time_iso = dt.isoformat()
-    end_time_iso = (dt + datetime.timedelta(hours=1)).isoformat()
+    india_tz = pytz.timezone('Asia/Kolkata')
+    start_time_iso = india_tz.localize(dt).isoformat()
+    end_time_iso = india_tz.localize(dt + datetime.timedelta(hours=1)).isoformat()
 
     event = {
         'summary': 'Meeting via AI Agent',
         'start': {'dateTime': start_time_iso, 'timeZone': 'Asia/Kolkata'},
         'end': {'dateTime': end_time_iso, 'timeZone': 'Asia/Kolkata'},
     }
+
+    print(f"DEBUG: Booking from {start_time_iso} to {end_time_iso}")
 
     try:
         service.events().insert(calendarId=calendar_id, body=event).execute()
