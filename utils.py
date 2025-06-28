@@ -49,7 +49,6 @@ def parse_time(text):
             }
         )
         if dt is None:
-            # fallback for weekday mentions like "friday"
             for weekday in list(calendar.day_name):
                 if weekday.lower() in text:
                     target_weekday = list(calendar.day_name).index(weekday)
@@ -74,11 +73,11 @@ def check_availability(text):
 
     india_tz = pytz.timezone('Asia/Kolkata')
 
-    day_start = dt.replace(hour=9, minute=0, second=0, microsecond=0)
-    day_end = dt.replace(hour=17, minute=0, second=0, microsecond=0)
+    day_start = india_tz.localize(dt.replace(hour=9, minute=0, second=0, microsecond=0))
+    day_end   = india_tz.localize(dt.replace(hour=17, minute=0, second=0, microsecond=0))
 
-    start_time_iso = india_tz.localize(day_start).isoformat()
-    end_time_iso = india_tz.localize(day_end).isoformat()
+    start_time_iso = day_start.isoformat()
+    end_time_iso   = day_end.isoformat()
 
     try:
         events_result = service.events().list(
@@ -94,11 +93,11 @@ def check_availability(text):
         busy_periods = []
         for event in events:
             start = event['start'].get('dateTime')
-            end = event['end'].get('dateTime')
+            end   = event['end'].get('dateTime')
             if start and end:
                 busy_periods.append((
-                    datetime.datetime.fromisoformat(start),
-                    datetime.datetime.fromisoformat(end)
+                    datetime.datetime.fromisoformat(start).astimezone(india_tz),
+                    datetime.datetime.fromisoformat(end).astimezone(india_tz)
                 ))
 
         free_slots = []
@@ -135,8 +134,9 @@ def book_meeting(text):
         return "I couldn't understand the date/time for booking. Please try again."
 
     india_tz = pytz.timezone('Asia/Kolkata')
-    start_time_iso = india_tz.localize(dt).isoformat()
-    end_time_iso = india_tz.localize(dt + datetime.timedelta(hours=1)).isoformat()
+    dt_aware = india_tz.localize(dt)
+    start_time_iso = dt_aware.isoformat()
+    end_time_iso   = (dt_aware + datetime.timedelta(hours=1)).isoformat()
 
     event = {
         'summary': 'Meeting via AI Agent',
