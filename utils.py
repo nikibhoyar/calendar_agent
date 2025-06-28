@@ -134,19 +134,29 @@ def book_meeting(text):
         return "I couldn't understand the date/time for booking. Please try again."
 
     india_tz = pytz.timezone('Asia/Kolkata')
-    dt_aware = india_tz.localize(dt)
-    start_time_iso = dt_aware.isoformat()
-    end_time_iso   = (dt_aware + datetime.timedelta(hours=1)).isoformat()
+    slot_start = india_tz.localize(dt)
+    slot_end   = slot_start + datetime.timedelta(hours=1)
 
-    event = {
-        'summary': 'Meeting via AI Agent',
-        'start': {'dateTime': start_time_iso, 'timeZone': 'Asia/Kolkata'},
-        'end': {'dateTime': end_time_iso, 'timeZone': 'Asia/Kolkata'},
-    }
-
-    print(f"DEBUG: Booking from {start_time_iso} to {end_time_iso}")
-
+    # check if already booked
     try:
+        events_result = service.events().list(
+            calendarId=calendar_id,
+            timeMin=slot_start.isoformat(),
+            timeMax=slot_end.isoformat(),
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+
+        events = events_result.get('items', [])
+        if events:
+            return f"That slot at {dt.strftime('%I:%M %p')} is already booked. Please choose another time."
+
+        # no conflicts → book it
+        event = {
+            'summary': 'Meeting via AI Agent',
+            'start': {'dateTime': slot_start.isoformat(), 'timeZone': 'Asia/Kolkata'},
+            'end': {'dateTime': slot_end.isoformat(), 'timeZone': 'Asia/Kolkata'},
+        }
         service.events().insert(calendarId=calendar_id, body=event).execute()
         return f"Meeting booked for {dt.strftime('%A, %d %B %Y at %I:%M %p')}."
     except Exception as e:
