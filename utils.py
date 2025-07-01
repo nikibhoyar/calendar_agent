@@ -62,7 +62,7 @@ def parse_time(text):
                     dt = dt.replace(hour=10, minute=0, second=0, microsecond=0)
                     break
 
-    print(f"DEBUG: Original text: '{text}', Parsed time: {dt}")
+    print(f"DEBUG: Parsed time for '{text}': {dt}")
     return dt
 
 def check_availability(text):
@@ -157,4 +157,7 @@ def book_meeting(text):
             'start': {'dateTime': slot_start.isoformat(), 'timeZone': 'Asia/Kolkata'},
             'end': {'dateTime': slot_end.isoformat(), 'timeZone': 'Asia/Kolkata'},
         }
-        ser
+        service.events().insert(calendarId=calendar_id, body=event).execute()
+        return f"Meeting booked for {dt.strftime('%A, %d %B %Y at %I:%M %p')}."
+    except Exception as e:
+        return f"An error occurred while booking the meeting: {e}"
