@@ -37,6 +37,8 @@ def parse_time(text):
     elif "tomorrow" in text:
         dt = now + datetime.timedelta(days=1)
         dt = dt.replace(hour=10, minute=0, second=0, microsecond=0)
+    elif "today" in text:
+        dt = now.replace(hour=10, minute=0, second=0, microsecond=0)
     else:
         dt = dateparser.parse(
             text,
@@ -137,7 +139,6 @@ def book_meeting(text):
     slot_start = india_tz.localize(dt)
     slot_end   = slot_start + datetime.timedelta(hours=1)
 
-    # check if already booked
     try:
         events_result = service.events().list(
             calendarId=calendar_id,
@@ -151,13 +152,9 @@ def book_meeting(text):
         if events:
             return f"That slot at {dt.strftime('%I:%M %p')} is already booked. Please choose another time."
 
-        # no conflicts → book it
         event = {
             'summary': 'Meeting via AI Agent',
             'start': {'dateTime': slot_start.isoformat(), 'timeZone': 'Asia/Kolkata'},
             'end': {'dateTime': slot_end.isoformat(), 'timeZone': 'Asia/Kolkata'},
         }
-        service.events().insert(calendarId=calendar_id, body=event).execute()
-        return f"Meeting booked for {dt.strftime('%A, %d %B %Y at %I:%M %p')}."
-    except Exception as e:
-        return f"An error occurred while booking the meeting: {e}"
+        ser
